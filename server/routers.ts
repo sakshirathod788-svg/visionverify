@@ -80,7 +80,7 @@ function analysisView(row: {
   imageWidth: number | null;
   imageHeight: number | null;
   status: "completed" | "unavailable" | "failed";
-  prediction: Prediction;
+  prediction: Prediction | null;
   confidencePercent: number | null;
   manipulationProbabilityPercent: number | null;
   modelMode: "live" | "demo" | "offline";
@@ -107,6 +107,7 @@ function analysisView(row: {
     modelVersion: row.modelVersion,
     evidence: (data.evidence ?? {}) as Record<string, unknown>,
     note: typeof data.note === "string" ? data.note : null,
+    providerTimestamp: typeof data.providerTimestamp === "string" ? data.providerTimestamp : null,
     createdAt: row.createdAt,
   };
 }
@@ -118,7 +119,7 @@ function unavailableResult(mode: "demo" | "offline", message: string) {
     confidencePercent: null,
     manipulationProbabilityPercent: null,
     modelMode: mode,
-    modelName: mode === "demo" ? "Demo mode" : "No model connected",
+    modelName: mode === "demo" ? "Demo mode — no real ML inference" : "ML model unavailable",
     modelVersion: null,
     evidence: {},
     note: message,
@@ -185,7 +186,7 @@ export const appRouter = router({
           const message =
             error instanceof Error
               ? error.message
-              : "The configured analysis model could not complete this request. Please try again later.";
+              : "ML model unavailable — no prediction generated.";
           const id = await createAnalysis({
             userId: ctx.user.id,
             storageKey: image.key,
@@ -196,7 +197,7 @@ export const appRouter = router({
             status: "failed",
             prediction: "unable_to_analyze",
             modelMode: "live",
-            modelName: "Live model response unavailable",
+            modelName: "ML model unavailable",
             analysisData: { note: message },
           });
           return {
@@ -206,7 +207,7 @@ export const appRouter = router({
             confidencePercent: null,
             manipulationProbabilityPercent: null,
             modelMode: "live" as const,
-            modelName: "Live model response unavailable",
+            modelName: "ML model unavailable",
             modelVersion: null,
             evidence: {},
             note: message,
@@ -221,7 +222,7 @@ export const appRouter = router({
           mimeType: input.mimeType,
           byteSize: imageBuffer.length,
           status: "completed",
-          prediction: inference.prediction,
+          prediction: null,
           confidencePercent: inference.confidencePercent,
           manipulationProbabilityPercent: inference.manipulationProbabilityPercent,
           modelMode: "live",
@@ -230,7 +231,14 @@ export const appRouter = router({
           analysisData: { evidence: inference.evidence, providerTimestamp: inference.providerTimestamp },
         });
 
-        return { id, status: "completed" as const, modelMode: "live" as const, ...inference, note: null };
+        return {
+          id,
+          status: "completed" as const,
+          prediction: null,
+          modelMode: "live" as const,
+          ...inference,
+          note: null,
+        };
       }),
     list: protectedProcedure
       .input(z.object({ limit: z.number().int().min(1).max(200).default(100) }))
@@ -243,10 +251,8 @@ export const appRouter = router({
       const completed = rows.filter((row) => row.status === "completed");
       return {
         total: rows.length,
-        authentic: completed.filter((row) => row.prediction === "likely_authentic").length,
-        suspicious: completed.filter(
-          (row) => row.prediction === "suspicious" || row.prediction === "likely_manipulated",
-        ).length,
+        providerScores: completed.filter((row) => row.prediction === null).length,
+        unavailable: rows.filter((row) => row.status !== "completed").length,
         recent: rows.slice(0, 5).map(analysisView),
       };
     }),

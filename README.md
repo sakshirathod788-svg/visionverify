@@ -1,64 +1,44 @@
 # VisionVerify
 
-VisionVerify is a research-oriented web application for submitting an image to a connected computer-vision model and presenting its **probabilistic** authenticity assessment. It is designed as a TYCS Semester 5 Artificial Intelligence and Machine Learning project in the computer-vision and digital-image-forensics domain.
+VisionVerify is a TYCS Semester 5 Artificial Intelligence and Machine Learning project for cautiously assessing image authenticity through a real computer-vision inference service. It accepts a user image, validates it, sends it securely from the server to the selected provider, stores only returned model data, and keeps every record private to its signed-in owner.
 
-> **Research limitation.** Image-authenticity assessments are probabilistic. A result is not proof of authenticity, manipulation, authorship, or intent. Performance depends on the connected model and its training data; false positives, false negatives, and unseen editing methods remain possible.
+> **Important limitation.** A VisionVerify result is a probabilistic model output, not definitive proof of authenticity, manipulation, authorship, or intent. The system must not be used as sole evidence in legal, safety, journalistic, security, or other high-stakes decisions.
 
-## Product behavior
+## Live ML integration
 
-| Area | Implemented behavior |
+The current live provider is [Sightengine](https://sightengine.com). VisionVerify sends a multipart image request to its documented `check.json` API with `models=deepfake,genai` and validates the provider response before any record is stored. The integration uses two distinct hosted computer-vision models:
+
+| Provider model | Actual scope in VisionVerify | Returned fields retained by VisionVerify |
+| --- | --- | --- |
+| [Deepfake Detection](https://sightengine.com/docs/deepfake-detection) | Prominent-face, identity-level deepfake or AI-modification scoring in photographic imagery. It is not a general image-editing detector. | `deepfake` score, provider request ID, provider timestamp when supplied. |
+| [AI-Generated Image Detection](https://sightengine.com/docs/ai-generated-image-detection) | Pixel-based estimation of whether an image is entirely AI-generated. | `ai_generated` score and optional `ai_generators` scores, provider request ID, provider timestamp when supplied. |
+
+The provider returns probabilities rather than one combined “authenticity confidence” or a universal authenticity verdict. VisionVerify stores and displays those returned scores under their provider field names; it does **not** synthesize an authentic, suspicious, or manipulated classification when the provider has not returned one. The product does **not** invent a combined confidence, model version, accuracy, precision, recall, F1 score, confusion matrix, dataset size, or forensic indicator.
+
+## Operating modes
+
+| State | Behaviour |
 | --- | --- |
-| Uploads | Signed-in users can select JPG, PNG, or WEBP images up to 5 MB. The browser and server both validate type and size; the server also verifies image signatures. |
-| Model states | The interface displays one of three explicit states: **Live model connected**, **Demo mode — no real inference**, or **Model not connected**. Demo and offline states never generate an authenticity prediction. |
-| Live inference | The server uploads the selected image securely, posts it to the configured model endpoint, validates the returned schema, and stores only the returned evidence and scores. |
-| Privacy | Analysis queries are protected by authentication and ownership checks. A user can list or revisit only records whose `userId` matches their signed-in account. |
-| History | The database stores image metadata, storage reference, timestamp, model provenance, status, returned prediction, confidence, manipulation probability, and supported evidence. |
+| Live model connected | Occurs only when valid `SIGHTENGINE_API_USER` and `SIGHTENGINE_API_SECRET` values exist in secure server configuration. The server makes the real API request. |
+| `VISIONVERIFY_MODEL_MODE=demo` | Displays **DEMO MODE — NO REAL ML INFERENCE**. The system stores no prediction, confidence, or evidence. |
+| `VISIONVERIFY_MODEL_MODE=offline`, missing credentials, timeout, provider error, or invalid provider response | Displays **ML model unavailable — no prediction generated.** No prediction or score is fabricated. |
 
-## Architecture
+## Security and privacy
+
+The browser accepts JPG, PNG, and WEBP images up to 5 MB. The server repeats the validation, verifies magic bytes, applies a 25-second model timeout, stores the image in secure object storage, and sends credentials only from server code. Analysis list and detail procedures require authenticated ownership; a user can retrieve only records tied to their own account.
+
+## Data flow
 
 ```text
 Signed-in user
-  → VisionVerify browser workspace
-  → protected server procedure
-  → secure object storage + live model adapter
-  → validated model response
-  → private analysis record
-  → dashboard, history, and revisitable detail view
+  → client-side image validation and preview
+  → protected server-side validation
+  → secure file storage
+  → Sightengine deepfake + AI-generated image models
+  → schema-validated provider response
+  → private database record and revisitable analysis result
 ```
 
-The frontend uses React, TypeScript, Tailwind CSS, and tRPC. The server uses Express, tRPC, Drizzle ORM, a MySQL-compatible database, and secure object storage. Authentication is handled through the built-in OAuth integration.
+## Verification
 
-## Configuring a live inference service
-
-Copy the variable names from `.env.example` into the application’s secret configuration. Do not place model URLs or keys in frontend code. Live mode is enabled only when both values below are set.
-
-| Variable | Required for live inference | Purpose |
-| --- | --- | --- |
-| `VISIONVERIFY_MODEL_MODE` | Yes | Set to `live` to permit real inference. Use `offline` by default; `demo` is interface-only and returns no prediction. |
-| `VISIONVERIFY_ML_ENDPOINT` | Yes | HTTPS endpoint for the model service. The server sends a multipart `image` field. |
-| `VISIONVERIFY_ML_API_KEY` | Optional | Bearer token passed from the server to the model provider. |
-
-The model endpoint must return JSON in this shape. Scores may be either decimals from `0` to `1` or percentages from `0` to `100`; VisionVerify normalizes them for display. The `analysis` object must contain only indicators actually calculated by the model.
-
-```json
-{
-  "prediction": "suspicious",
-  "confidence": 0.87,
-  "manipulationProbability": 0.76,
-  "model": "your-model-name",
-  "modelVersion": "1.0.0",
-  "timestamp": "2026-08-23T12:00:00Z",
-  "analysis": {
-    "supported_indicator": "value returned by the model"
-  }
-}
-```
-
-Allowed `prediction` values are `likely_authentic`, `suspicious`, `likely_manipulated`, and `unable_to_analyze`. The last value is appropriate when the model itself cannot assess an image.
-
-## Data model and operating notes
-
-The `analyses` table relates each record to the platform user, stores the secure storage key rather than image bytes, and uses a database foreign key with cascade deletion. The browser never receives the model service credentials. The server times out live model calls after 25 seconds and records a transparent failed status rather than inventing a result.
-
-Run `pnpm test` for the safeguard tests and `pnpm check` for TypeScript validation. Apply the database migration after schema updates before using the analysis flow.
-
+`pnpm check` runs TypeScript validation. `pnpm test` runs local validation and authorization tests. The real provider credential test is intentionally gated to avoid repeated paid API requests; run `VISIONVERIFY_RUN_LIVE_TESTS=true pnpm test -- server/sightengine.credentials.test.ts` after configuring credentials. A passing test confirms that the provider accepts the credentials and returns a real deepfake score on the provider’s documented sample image.

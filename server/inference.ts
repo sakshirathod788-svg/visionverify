@@ -15,11 +15,13 @@ export type InferenceState = {
   available: boolean;
   label: string;
   message: string;
+  provider: "sightengine" | null;
 };
 
 export type InferenceResult = {
-  prediction: Prediction;
+  /** Sightengine does not return a unified confidence for the combined classification. */
   confidencePercent: number | null;
+  /** Sightengine returns individual scores in evidence rather than this generic field. */
   manipulationProbabilityPercent: number | null;
   modelName: string;
   modelVersion: string | null;
@@ -27,14 +29,25 @@ export type InferenceResult = {
   evidence: Record<string, unknown>;
 };
 
-const providerResponseSchema = z.object({
-  prediction: predictionSchema,
-  confidence: z.number().finite().optional(),
-  manipulationProbability: z.number().finite().optional(),
-  model: z.string().trim().min(1),
-  modelVersion: z.string().trim().min(1).optional(),
-  timestamp: z.string().trim().min(1).optional(),
-  analysis: z.record(z.string(), z.unknown()).default({}),
+const SIGHTENGINE_ENDPOINT = "https://api.sightengine.com/1.0/check.json";
+const SIGHTENGINE_MODELS = "deepfake,genai";
+
+const sightengineResponseSchema = z.object({
+  status: z.string(),
+  request: z
+    .object({
+      id: z.string().optional(),
+      timestamp: z.number().finite().optional(),
+    })
+    .optional(),
+  type: z
+    .object({
+      deepfake: z.number().min(0).max(1).optional(),
+      ai_generated: z.number().min(0).max(1).optional(),
+      ai_generators: z.record(z.string(), z.number().min(0).max(1)).optional(),
+    })
+    .optional(),
+  error: z.unknown().optional(),
 });
 
 export class InferenceRequestError extends Error {
@@ -46,55 +59,61 @@ export class InferenceRequestError extends Error {
   }
 }
 
+function isSightengineConfigured() {
+  return Boolean(process.env.SIGHTENGINE_API_USER && process.env.SIGHTENGINE_API_SECRET);
+}
+
 /**
- * A live endpoint is deliberately opt-in. The app remains honest when no model
- * endpoint is configured and never substitutes a fabricated classification.
+ * Model availability is intentionally strict. A live badge appears only when
+ * Sightengine credentials are configured server-side. No fallback model or
+ * synthetic result is used.
  */
 export function getInferenceState(): InferenceState {
   const configuredMode = process.env.VISIONVERIFY_MODEL_MODE?.toLowerCase();
-  const endpoint = process.env.VISIONVERIFY_ML_ENDPOINT;
 
   if (configuredMode === "demo") {
     return {
       mode: "demo",
       available: false,
-      label: "Demo mode — no real inference",
+      label: "DEMO MODE — NO REAL ML INFERENCE",
       message:
-        "Demo mode is intended for interface testing only. No authenticity prediction will be generated.",
+        "Demo mode is only for interface testing. No prediction, confidence score, or forensic evidence will be generated.",
+      provider: null,
     };
   }
 
-  if (configuredMode === "live" && endpoint) {
+  if (configuredMode !== "offline" && isSightengineConfigured()) {
     return {
       mode: "live",
       available: true,
-      label: "Live model connected",
+      label: "Live ML model connected",
       message:
-        "A configured model will return a probabilistic assessment for supported images.",
+        "Sightengine’s Deepfake Detection and AI-Generated Image Detection models will return actual provider scores for supported images.",
+      provider: "sightengine",
     };
   }
 
   return {
     mode: "offline",
     available: false,
-    label: "Model not connected",
-    message:
-      "A model endpoint has not been configured. VisionVerify will not claim an authenticity result.",
+    label: "ML model unavailable",
+    message: "ML model unavailable — no prediction generated.",
+    provider: null,
   };
 }
 
-function scoreAsPercent(value: number | undefined): number | null {
-  if (value === undefined) return null;
-  const percent = value <= 1 ? value * 100 : value;
-  if (percent < 0 || percent > 100) {
-    throw new InferenceRequestError("The connected model returned an invalid score.");
-  }
-  return Math.round(percent * 10) / 10;
+function percent(score: number) {
+  return Math.round(score * 1000) / 10;
+}
+
+function scoreForEvidence(value: number | undefined): number | null {
+  return value === undefined ? null : percent(value);
 }
 
 /**
- * Calls a real, server-configured model endpoint. The endpoint must receive a
- * multipart `image` field and return the documented response shape in README.
+ * Runs the real Sightengine image-analysis request. Credentials stay on the
+ * server, and each returned field is schema-validated before it can become a
+ * user-visible result or persistent analysis record.
  */
 export async function runLiveInference(input: {
   buffer: Buffer;
@@ -102,59 +121,86 @@ export async function runLiveInference(input: {
   mimeType: string;
 }): Promise<InferenceResult> {
   const state = getInferenceState();
-  const endpoint = process.env.VISIONVERIFY_ML_ENDPOINT;
+  const apiUser = process.env.SIGHTENGINE_API_USER;
+  const apiSecret = process.env.SIGHTENGINE_API_SECRET;
 
-  if (state.mode !== "live" || !endpoint) {
-    throw new InferenceRequestError(state.message);
+  if (state.mode !== "live" || !apiUser || !apiSecret) {
+    throw new InferenceRequestError("ML model unavailable — no prediction generated.");
   }
 
   const formData = new FormData();
   formData.append(
-    "image",
+    "media",
     new Blob([new Uint8Array(input.buffer)], { type: input.mimeType }),
     input.filename,
   );
+  formData.append("models", SIGHTENGINE_MODELS);
+  formData.append("api_user", apiUser);
+  formData.append("api_secret", apiSecret);
 
-  const apiKey = process.env.VISIONVERIFY_ML_API_KEY;
   let response: Response;
   try {
-    response = await fetch(endpoint, {
+    response = await fetch(SIGHTENGINE_ENDPOINT, {
       method: "POST",
-      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
       body: formData,
       signal: AbortSignal.timeout(25_000),
     });
   } catch {
     throw new InferenceRequestError(
-      "VisionVerify could not connect to the configured analysis model. Please try again later.",
+      "The ML model could not be reached. No prediction was generated; please try again later.",
     );
   }
 
   if (!response.ok) {
-    throw new InferenceRequestError(
-      "The configured analysis model could not complete this request. Please try again later.",
-    );
+    const message = response.status === 401 || response.status === 403
+      ? "The ML model credentials were rejected. No prediction was generated."
+      : response.status === 429
+        ? "The ML model is rate-limited. No prediction was generated; please try again later."
+        : "The ML model could not complete this request. No prediction was generated.";
+    throw new InferenceRequestError(message);
   }
 
   let payload: unknown;
   try {
     payload = await response.json();
   } catch {
-    throw new InferenceRequestError("The configured analysis model returned an invalid response.");
+    throw new InferenceRequestError("The ML model returned an unreadable response. No prediction was generated.");
   }
 
-  const parsed = providerResponseSchema.safeParse(payload);
-  if (!parsed.success) {
-    throw new InferenceRequestError("The configured analysis model returned an unsupported response.");
+  const parsed = sightengineResponseSchema.safeParse(payload);
+  if (!parsed.success || parsed.data.status !== "success") {
+    throw new InferenceRequestError("The ML model returned an invalid result. No prediction was generated.");
+  }
+
+  const deepfakeScore = parsed.data.type?.deepfake;
+  const aiGeneratedScore = parsed.data.type?.ai_generated;
+  if (deepfakeScore === undefined && aiGeneratedScore === undefined) {
+    throw new InferenceRequestError("The ML model returned no usable detection score. No prediction was generated.");
+  }
+
+  const providerTimestamp = parsed.data.request?.timestamp
+    ? new Date(parsed.data.request.timestamp * 1000).toISOString()
+    : null;
+  const evidence: Record<string, unknown> = {};
+  if (deepfakeScore !== undefined) {
+    evidence.deepfake_score_percent = scoreForEvidence(deepfakeScore);
+  }
+  if (aiGeneratedScore !== undefined) {
+    evidence.ai_generated_probability_percent = scoreForEvidence(aiGeneratedScore);
+  }
+  if (parsed.data.type?.ai_generators) {
+    evidence.ai_generator_scores = parsed.data.type.ai_generators;
+  }
+  if (parsed.data.request?.id) {
+    evidence.provider_request_id = parsed.data.request.id;
   }
 
   return {
-    prediction: parsed.data.prediction,
-    confidencePercent: scoreAsPercent(parsed.data.confidence),
-    manipulationProbabilityPercent: scoreAsPercent(parsed.data.manipulationProbability),
-    modelName: parsed.data.model,
-    modelVersion: parsed.data.modelVersion ?? null,
-    providerTimestamp: parsed.data.timestamp ?? null,
-    evidence: parsed.data.analysis,
+    confidencePercent: null,
+    manipulationProbabilityPercent: null,
+    modelName: "Sightengine Deepfake Detection + AI-Generated Image Detection",
+    modelVersion: null,
+    providerTimestamp,
+    evidence,
   };
 }

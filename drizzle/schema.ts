@@ -33,9 +33,7 @@ export const analyses = mysqlTable("analyses", {
     "suspicious",
     "likely_manipulated",
     "unable_to_analyze",
-  ])
-    .default("unable_to_analyze")
-    .notNull(),
+  ]),
   confidencePercent: int("confidencePercent"),
   manipulationProbabilityPercent: int("manipulationProbabilityPercent"),
   modelMode: mysqlEnum("modelMode", ["live", "demo", "offline"])
