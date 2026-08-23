@@ -1,0 +1,49 @@
+import DashboardLayout from "@/components/DashboardLayout";
+import { ModelStatusBadge } from "@/components/ModelStatusBadge";
+import { Button } from "@/components/ui/button";
+import { trpc } from "@/lib/trpc";
+import { AlertCircle, CheckCircle2, FileImage, ImagePlus, LoaderCircle, RotateCcw, Trash2, UploadCloud } from "lucide-react";
+import { ChangeEvent, DragEvent, useRef, useState } from "react";
+import { Link } from "wouter";
+
+const MAX_BYTES = 5 * 1024 * 1024;
+const allowed = ["image/jpeg", "image/png", "image/webp"];
+type Submission = { id: number; status: "completed" | "unavailable" | "failed"; prediction: string; confidencePercent: number | null; modelMode: "live" | "demo" | "offline"; note: string | null };
+
+function labelFor(result: Submission) { return result.prediction === "likely_authentic" ? "Likely authentic" : result.prediction === "likely_manipulated" ? "Likely manipulated" : result.prediction === "suspicious" ? "Suspicious" : "Unable to analyze"; }
+
+export default function AnalyzeImage() {
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [result, setResult] = useState<Submission | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const modelState = trpc.analysis.modelState.useQuery(undefined, { retry: false });
+  const submit = trpc.analysis.submit.useMutation({ onError: (err) => setError(err.message) });
+
+  const selectFile = (next: File | null) => {
+    setError(null); setResult(null);
+    if (!next) return;
+    if (!allowed.includes(next.type)) { setFile(null); setPreview(null); setError("Choose a JPG, PNG, or WEBP image."); return; }
+    if (next.size > MAX_BYTES) { setFile(null); setPreview(null); setError("Images must be 5 MB or smaller."); return; }
+    setFile(next); setPreview(URL.createObjectURL(next));
+  };
+  const onInput = (event: ChangeEvent<HTMLInputElement>) => selectFile(event.target.files?.[0] ?? null);
+  const onDrop = (event: DragEvent<HTMLDivElement>) => { event.preventDefault(); setDragging(false); selectFile(event.dataTransfer.files?.[0] ?? null); };
+  const reset = () => { setFile(null); setPreview(null); setError(null); setResult(null); if (inputRef.current) inputRef.current.value = ""; };
+  const analyze = () => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => submit.mutate({ filename: file.name, mimeType: file.type as "image/jpeg" | "image/png" | "image/webp", imageDataUrl: String(reader.result) }, { onSuccess: (output) => setResult(output) });
+    reader.onerror = () => setError("VisionVerify could not read this image. Please choose another file.");
+    reader.readAsDataURL(file);
+  };
+  const processing = submit.isPending;
+  const steps = processing ? ["Preparing image", "Validating image format", modelState.data?.mode === "live" ? "Running model inference" : "Recording model availability"] : [];
+
+  return <DashboardLayout><div className="mx-auto max-w-5xl space-y-8"><div><p className="eyebrow">New analysis</p><h1 className="font-display mt-3 text-4xl tracking-[-0.03em] text-white">Assess an image carefully.</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">Upload a supported image. VisionVerify will show a real result only when a live analysis model is connected.</p></div><div className="rounded-2xl border border-white/8 bg-white/[0.025] p-5"><ModelStatusBadge state={modelState.data} withMessage /></div>
+    {result ? <div className="rounded-3xl border border-white/10 bg-[#0d0c11] p-6 sm:p-8"><div className="flex flex-col gap-6 sm:flex-row sm:items-start"><div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${result.status === "completed" ? "bg-emerald-300/12 text-emerald-200" : "bg-amber-300/12 text-amber-200"}`}>{result.status === "completed" ? <CheckCircle2 className="h-6 w-6" /> : <AlertCircle className="h-6 w-6" />}</div><div className="flex-1"><p className="font-mono text-[11px] tracking-[0.12em] text-zinc-500">ANALYSIS RESULT</p><h2 className="mt-2 text-2xl font-semibold text-white">{labelFor(result)}</h2><p className="mt-2 text-sm leading-6 text-zinc-400">{result.status === "completed" ? "This is a probabilistic model assessment, not definitive proof." : result.note ?? "No authenticity finding was created."}</p>{result.confidencePercent !== null && <div className="mt-5 rounded-xl border border-white/8 bg-white/[0.025] p-4"><p className="text-xs text-zinc-500">Model confidence</p><p className="mt-1 text-xl font-semibold text-violet-100">{result.confidencePercent}%</p></div>}<div className="mt-6 flex flex-wrap gap-3"><Link href={`/workspace/history/${result.id}`}><Button className="rounded-xl bg-violet-200 text-violet-950 hover:bg-white">View record</Button></Link><Button onClick={reset} variant="outline" className="rounded-xl border-white/12 bg-transparent text-zinc-200 hover:bg-white/8 hover:text-white"><RotateCcw className="mr-2 h-4 w-4" />Analyze another</Button></div></div></div></div> : <div className="grid gap-6 lg:grid-cols-[1.25fr_.75fr]"><div><div onDragOver={(event) => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop} className={`relative flex min-h-[360px] flex-col items-center justify-center overflow-hidden rounded-3xl border border-dashed p-6 text-center transition-colors ${dragging ? "border-violet-200 bg-violet-200/8" : "border-white/16 bg-[#0d0c11]"}`}>{preview ? <><img src={preview} alt="Selected for analysis" className="absolute inset-0 h-full w-full object-contain p-4 opacity-65" /><div className="absolute inset-0 bg-[#0d0c11]/48" /><div className="relative z-10 rounded-2xl border border-white/12 bg-black/35 p-5 backdrop-blur-md"><p className="text-sm font-medium text-white">{file?.name}</p><p className="mt-1 text-xs text-zinc-400">{file && (file.size / 1024 / 1024).toFixed(2)} MB · ready to assess</p><button onClick={reset} className="mt-3 inline-flex items-center gap-1 text-xs text-violet-100 hover:text-white"><Trash2 className="h-3.5 w-3.5" /> Remove image</button></div></> : <><span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-300/10 text-violet-200"><UploadCloud className="h-6 w-6" /></span><h2 className="mt-5 text-lg font-semibold text-white">Drop an image here</h2><p className="mt-2 max-w-xs text-sm leading-6 text-zinc-500">JPG, PNG, or WEBP · up to 5 MB</p><Button onClick={() => inputRef.current?.click()} variant="outline" className="mt-6 rounded-xl border-white/12 bg-white/[0.03] text-zinc-200 hover:bg-white/8 hover:text-white"><ImagePlus className="mr-2 h-4 w-4" /> Browse files</Button><input ref={inputRef} onChange={onInput} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" /></>}</div>{error && <div role="alert" className="mt-3 flex gap-2 rounded-xl border border-red-300/15 bg-red-300/[0.06] p-3 text-sm text-red-100"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />{error}</div>}</div><div className="rounded-3xl border border-white/8 bg-white/[0.025] p-6"><FileImage className="h-5 w-5 text-violet-200" /><h2 className="mt-6 text-lg font-semibold text-white">Before you submit</h2><div className="mt-5 space-y-4 text-sm leading-6 text-zinc-400"><p><strong className="font-medium text-zinc-200">Your record is private.</strong> Uploaded analysis records are associated with your signed-in account.</p><p><strong className="font-medium text-zinc-200">No fabricated result.</strong> Offline and demo states save only their actual availability status.</p><p><strong className="font-medium text-zinc-200">Use judgment.</strong> An image model cannot establish definitive forensic proof.</p></div></div></div>}
+    {!result && <div className="flex items-center justify-between rounded-2xl border border-white/8 bg-[#0d0c11] p-4"><div>{processing ? <div><p className="text-sm font-medium text-zinc-100">{steps[Math.min(steps.length - 1, 2)]}…</p><p className="mt-1 text-xs text-zinc-500">This screen reflects the actual request state.</p></div> : <p className="text-sm text-zinc-500">Choose one supported image to enable submission.</p>}</div><Button disabled={!file || processing} onClick={analyze} className="h-11 rounded-xl bg-violet-200 px-5 text-violet-950 hover:bg-white disabled:opacity-40">{processing ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />Analyzing</> : "Analyze image"}</Button></div>}
+  </div></DashboardLayout>;
+}

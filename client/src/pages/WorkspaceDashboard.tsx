@@ -1,0 +1,29 @@
+import DashboardLayout from "@/components/DashboardLayout";
+import { ModelStatusBadge } from "@/components/ModelStatusBadge";
+import { Button } from "@/components/ui/button";
+import { trpc } from "@/lib/trpc";
+import { Activity, ArrowRight, Check, CircleAlert, ScanSearch, ShieldAlert } from "lucide-react";
+import { Link } from "wouter";
+
+function predictionLabel(prediction: string) {
+  return prediction === "likely_authentic" ? "Likely authentic" : prediction === "likely_manipulated" ? "Likely manipulated" : prediction === "suspicious" ? "Suspicious" : "Unable to analyze";
+}
+
+export default function WorkspaceDashboard() {
+  const summary = trpc.analysis.summary.useQuery(undefined, { retry: false });
+  const modelState = trpc.analysis.modelState.useQuery(undefined, { retry: false });
+  const data = summary.data;
+  const stats = [
+    { label: "Total analyses", value: data?.total ?? "—", icon: Activity },
+    { label: "Likely authentic", value: data?.authentic ?? "—", icon: Check },
+    { label: "Requires review", value: data?.suspicious ?? "—", icon: ShieldAlert },
+  ];
+
+  return <DashboardLayout><div className="space-y-8">
+    <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end"><div><p className="eyebrow">Research workspace</p><h1 className="font-display mt-3 text-4xl tracking-[-0.03em] text-white">Analysis overview</h1><p className="mt-2 text-sm text-zinc-400">Review activity from your private VisionVerify account.</p></div><Link href="/workspace/analyze"><Button className="h-11 rounded-xl bg-violet-200 text-violet-950 hover:bg-white">Analyze new image <ArrowRight className="ml-2 h-4 w-4" /></Button></Link></div>
+    <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-5"><ModelStatusBadge state={modelState.data} withMessage /></div>
+    <div className="grid gap-4 sm:grid-cols-3">{stats.map(({ label, value, icon: Icon }) => <div key={label} className="rounded-2xl border border-white/8 bg-[#0d0c11] p-5"><Icon className="h-5 w-5 text-violet-200" /><p className="mt-7 text-3xl font-semibold tracking-tight text-white">{summary.isLoading ? "…" : value}</p><p className="mt-1 text-sm text-zinc-500">{label}</p></div>)}</div>
+    <section className="rounded-2xl border border-white/8 bg-[#0d0c11]"><div className="flex items-center justify-between border-b border-white/8 px-5 py-4"><div><h2 className="text-sm font-semibold text-white">Recent analyses</h2><p className="mt-1 text-xs text-zinc-500">Only your own stored records are visible here.</p></div><Link href="/workspace/history" className="text-xs font-medium text-violet-200 hover:text-white">View history</Link></div>{summary.isLoading ? <div className="p-8 text-sm text-zinc-500">Loading your analysis history…</div> : data?.recent.length ? <div className="divide-y divide-white/6">{data.recent.map((item) => <Link key={item.id} href={`/workspace/history/${item.id}`} className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-white/[0.025]"><img src={item.imageUrl} alt="" className="h-10 w-10 rounded-lg object-cover" /><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-zinc-200">{item.filename}</p><p className="mt-1 text-xs text-zinc-500">{new Date(item.createdAt).toLocaleString()}</p></div><span className="text-right text-xs text-zinc-400">{predictionLabel(item.prediction)}<br />{item.confidencePercent !== null ? `${item.confidencePercent}% confidence` : item.status}</span></Link>)}</div> : <div className="px-5 py-12 text-center"><ScanSearch className="mx-auto h-6 w-6 text-zinc-600" /><p className="mt-3 text-sm text-zinc-400">No analyses yet.</p><p className="mt-1 text-xs text-zinc-600">Submit an image when you are ready to begin.</p></div>}</section>
+    <div className="flex gap-3 rounded-2xl border border-amber-300/12 bg-amber-300/[0.04] p-4 text-xs leading-5 text-zinc-400"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-200" />Authenticity findings are probabilistic model outputs. They should not be treated as definitive evidence.</div>
+  </div></DashboardLayout>;
+}
