@@ -24,3 +24,6 @@
 - [x] Repair client-side file selection so valid JPG/JPEG, PNG, and WEBP images are MIME-checked, decode-checked, previewed correctly, and submitted only within the 5 MB limit.
 - [x] Add regression tests for decodable valid image inputs and rejected invalid image data, then verify desktop, tablet, and mobile Lavender Dream layouts.
 - [x] Add automated browser-decode tests for successful valid-image preview inspection and decode-failing image rejection.
+- [x] Trace and fix the analysis submission mutation that receives an HTML response instead of a structured tRPC result.
+- [x] Add regression coverage for server-side analysis mutation failures so the client receives a structured error message rather than a JSON parse error.
+- [x] Add automated server endpoint coverage proving invalid binary upload requests return structured JSON error objects.
