@@ -51,14 +51,14 @@ export default function Home() {
           </div>
           <div className="relative mx-auto w-full max-w-[540px] lg:justify-self-end">
             <div className="hero-orb -right-16 -top-14" />
-            <div className="relative overflow-hidden rounded-[1.9rem] border border-white/12 bg-[#14111b] p-3 shadow-2xl shadow-black/40">
-              <div className="relative aspect-[1.14] overflow-hidden rounded-[1.4rem] border border-white/10 bg-[radial-gradient(circle_at_70%_28%,rgba(196,170,255,0.45),transparent_15%),radial-gradient(circle_at_28%_60%,rgba(96,47,175,0.66),transparent_32%),linear-gradient(135deg,#261c37,#0c0a10_74%)]">
-                <div className="absolute inset-0 opacity-50 [background-image:linear-gradient(rgba(255,255,255,.06)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.06)_1px,transparent_1px)] [background-size:32px_32px]" />
-                <div className="absolute left-[13%] top-[18%] h-[54%] w-[57%] rounded-[35%_58%_43%_49%] border border-violet-100/40 bg-violet-300/10 shadow-[0_0_80px_rgba(159,122,234,.25)]" />
-                <div className="absolute left-[21%] top-[28%] h-[30%] w-[30%] rounded-full border border-white/30 bg-white/10 blur-[1px]" />
+            <div className="relative overflow-hidden rounded-[1.9rem] border border-violet-200 bg-white p-3 shadow-[0_24px_52px_rgb(111_69_157/.16)]">
+              <div className="relative aspect-[1.14] overflow-hidden rounded-[1.4rem] border border-violet-100 bg-[radial-gradient(circle_at_70%_28%,rgba(216,184,251,.64),transparent_16%),radial-gradient(circle_at_28%_60%,rgba(239,220,255,.95),transparent_34%),linear-gradient(135deg,#fff,#f4ecff_74%)]">
+                <div className="absolute inset-0 opacity-70 [background-image:linear-gradient(rgba(129,86,175,.10)_1px,transparent_1px),linear-gradient(90deg,rgba(129,86,175,.10)_1px,transparent_1px)] [background-size:32px_32px]" />
+                <div className="absolute left-[13%] top-[18%] h-[54%] w-[57%] rounded-[35%_58%_43%_49%] border border-violet-300/60 bg-violet-200/30 shadow-[0_0_80px_rgba(171,125,225,.22)]" />
+                <div className="absolute left-[21%] top-[28%] h-[30%] w-[30%] rounded-full border border-white bg-white/65 blur-[1px]" />
                 <div className="scan-line" />
-                <div className="absolute left-5 top-5 rounded-lg border border-white/14 bg-black/20 px-3 py-2 font-mono text-[10px] tracking-[0.12em] text-violet-100">VISUAL SIGNALS / 01</div>
-                <div className="absolute bottom-5 left-5 right-5 flex items-end justify-between rounded-xl border border-white/12 bg-black/30 p-4 backdrop-blur-md"><div><p className="font-mono text-[10px] tracking-[0.12em] text-zinc-400">ASSESSMENT LAYER</p><p className="mt-1 text-sm text-zinc-100">Model-aware analysis</p></div><Sparkles className="h-5 w-5 text-violet-200" /></div>
+                <div className="absolute left-5 top-5 rounded-lg border border-violet-200 bg-white/75 px-3 py-2 font-mono text-[10px] tracking-[0.12em] text-violet-700">VISUAL SIGNALS / 01</div>
+                <div className="absolute bottom-5 left-5 right-5 flex items-end justify-between rounded-xl border border-violet-100 bg-white/80 p-4 backdrop-blur-md"><div><p className="font-mono text-[10px] tracking-[0.12em] text-violet-500">ASSESSMENT LAYER</p><p className="mt-1 text-sm text-[#49345f]">Model-aware analysis</p></div><Sparkles className="h-5 w-5 text-violet-500" /></div>
               </div>
             </div>
           </div>

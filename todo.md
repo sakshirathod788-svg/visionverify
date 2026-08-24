@@ -18,3 +18,9 @@
 - [x] Update the technology and README documentation with actual provider/model details, source links, processing flow, and evidence-based limitations.
 - [x] Add integration-focused tests and verify unavailable-model, authorization, invalid-file, responsive, and live-inference paths without inventing model metrics.
 - [x] Separate the actual Sightengine response values from any product-level interpretation in persisted data and every result view.
+- [x] Define Lavender Dream design tokens with a white canvas, soft lavender and pink gradients, readable navy text, thin borders, rounded surfaces, and restrained motion.
+- [x] Redesign the authenticated dashboard shell with the requested sidebar identity, responsive mobile navigation, hero, upload area, feature cards, profile area, and footer while retaining current routes and actions.
+- [x] Apply the same light visual system to public, history, analysis detail, technology, and about pages without removing real provider-result messaging.
+- [x] Repair client-side file selection so valid JPG/JPEG, PNG, and WEBP images are MIME-checked, decode-checked, previewed correctly, and submitted only within the 5 MB limit.
+- [x] Add regression tests for decodable valid image inputs and rejected invalid image data, then verify desktop, tablet, and mobile Lavender Dream layouts.
+- [x] Add automated browser-decode tests for successful valid-image preview inspection and decode-failing image rejection.
