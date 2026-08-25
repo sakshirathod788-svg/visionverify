@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { createAnalysis } from "./db";
 import { getInferenceState, InferenceRequestError, type InferenceResult, runLiveInference } from "./inference";
-import { storagePut } from "./storage";
+import { storagePresignPut, storagePut, storageReadBuffer } from "./storage";
 
 export const allowedImageMimeTypes = ["image/jpeg", "image/png", "image/webp"] as const;
 export type AllowedImageMimeType = (typeof allowedImageMimeTypes)[number];
@@ -10,9 +10,7 @@ export function isAllowedImageMimeType(value: string | undefined): value is Allo
   return Boolean(value && (allowedImageMimeTypes as readonly string[]).includes(value));
 }
 
-function safeFilename(filename: string) {
-  return filename.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120) || "upload";
-}
+function safeFilename(filename: string) { return filename.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120) || "upload"; }
 
 function detectedMimeType(buffer: Buffer): AllowedImageMimeType | undefined {
   if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return "image/jpeg";
@@ -38,19 +36,13 @@ function unavailableResult(mode: "demo" | "offline", note: string) {
   return { status: "unavailable" as const, prediction: "unable_to_analyze" as const, confidencePercent: null, manipulationProbabilityPercent: null, modelMode: mode, modelName: mode === "demo" ? "Demo model" : "ML model unavailable", modelVersion: null, evidence: {}, note };
 }
 
-export async function submitImageAnalysis(input: { userId: number; filename: string; mimeType: AllowedImageMimeType; imageBuffer: Buffer }) {
+async function persistAndAnalyze(input: { userId: number; filename: string; mimeType: AllowedImageMimeType; imageBuffer: Buffer; storageKey: string; imageUrl: string }) {
   const imageBuffer = validateImageBuffer(input.imageBuffer, input.mimeType);
   const filename = safeFilename(input.filename);
   const state = getInferenceState();
-  let image: { key: string; url: string };
-  try {
-    image = await storagePut(`visionverify/${input.userId}/${filename}`, imageBuffer, input.mimeType);
-  } catch {
-    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "VisionVerify could not securely store the selected image. Please try again." });
-  }
   if (state.mode !== "live") {
     const result = unavailableResult(state.mode, state.message);
-    const id = await createAnalysis({ userId: input.userId, storageKey: image.key, imageUrl: image.url, filename, mimeType: input.mimeType, byteSize: imageBuffer.length, status: result.status, prediction: result.prediction, modelMode: result.modelMode, modelName: result.modelName, analysisData: { note: result.note } });
+    const id = await createAnalysis({ userId: input.userId, storageKey: input.storageKey, imageUrl: input.imageUrl, filename, mimeType: input.mimeType, byteSize: imageBuffer.length, status: result.status, prediction: result.prediction, modelMode: result.modelMode, modelName: result.modelName, analysisData: { note: result.note } });
     return { id, ...result };
   }
   let inference: InferenceResult;
@@ -60,9 +52,31 @@ export async function submitImageAnalysis(input: { userId: number; filename: str
     const message = error instanceof Error ? error.message : "ML model unavailable — no prediction generated.";
     const incompleteResponse = error instanceof InferenceRequestError && error.reason === "incomplete_response";
     const modelName = incompleteResponse ? "Provider response incomplete" : "ML model unavailable";
-    const id = await createAnalysis({ userId: input.userId, storageKey: image.key, imageUrl: image.url, filename, mimeType: input.mimeType, byteSize: imageBuffer.length, status: "failed", prediction: "unable_to_analyze", modelMode: "live", modelName, analysisData: { note: message, providerResponseState: incompleteResponse ? "missing_score" : "provider_unavailable" } });
+    const id = await createAnalysis({ userId: input.userId, storageKey: input.storageKey, imageUrl: input.imageUrl, filename, mimeType: input.mimeType, byteSize: imageBuffer.length, status: "failed", prediction: "unable_to_analyze", modelMode: "live", modelName, analysisData: { note: message, providerResponseState: incompleteResponse ? "missing_score" : "provider_unavailable" } });
     return { id, status: "failed" as const, prediction: "unable_to_analyze" as const, confidencePercent: null, manipulationProbabilityPercent: null, modelMode: "live" as const, modelName, modelVersion: null, evidence: {}, note: message };
   }
-  const id = await createAnalysis({ userId: input.userId, storageKey: image.key, imageUrl: image.url, filename, mimeType: input.mimeType, byteSize: imageBuffer.length, status: "completed", prediction: null, confidencePercent: inference.confidencePercent, manipulationProbabilityPercent: inference.manipulationProbabilityPercent, modelMode: "live", modelName: inference.modelName, modelVersion: inference.modelVersion, analysisData: { evidence: inference.evidence, providerTimestamp: inference.providerTimestamp } });
+  const id = await createAnalysis({ userId: input.userId, storageKey: input.storageKey, imageUrl: input.imageUrl, filename, mimeType: input.mimeType, byteSize: imageBuffer.length, status: "completed", prediction: null, confidencePercent: inference.confidencePercent, manipulationProbabilityPercent: inference.manipulationProbabilityPercent, modelMode: "live", modelName: inference.modelName, modelVersion: inference.modelVersion, analysisData: { evidence: inference.evidence, providerTimestamp: inference.providerTimestamp } });
   return { id, status: "completed" as const, prediction: null, modelMode: "live" as const, ...inference, note: null };
+}
+
+export async function prepareDirectImageUpload(input: { userId: number; filename: string; mimeType: AllowedImageMimeType; byteSize: number }) {
+  const maxBytes = 5 * 1024 * 1024;
+  if (!Number.isInteger(input.byteSize) || input.byteSize <= 0 || input.byteSize > maxBytes) throw new TRPCError({ code: "PAYLOAD_TOO_LARGE", message: "Images must be 5 MB or smaller." });
+  const filename = safeFilename(input.filename);
+  const stored = await storagePresignPut(`visionverify/${input.userId}/${filename}`);
+  return { key: stored.key, uploadUrl: stored.url, imageUrl: `/manus-storage/${stored.key}`, filename };
+}
+
+export async function completeDirectImageUpload(input: { userId: number; filename: string; mimeType: AllowedImageMimeType; storageKey: string; imageUrl: string }) {
+  let imageBuffer: Buffer;
+  try { imageBuffer = await storageReadBuffer(input.storageKey); } catch { throw new TRPCError({ code: "BAD_REQUEST", message: "VisionVerify could not read the uploaded image. Please try again." }); }
+  return persistAndAnalyze({ ...input, imageBuffer });
+}
+
+export async function submitImageAnalysis(input: { userId: number; filename: string; mimeType: AllowedImageMimeType; imageBuffer: Buffer }) {
+  const imageBuffer = validateImageBuffer(input.imageBuffer, input.mimeType);
+  const filename = safeFilename(input.filename);
+  let image: { key: string; url: string };
+  try { image = await storagePut(`visionverify/${input.userId}/${filename}`, imageBuffer, input.mimeType); } catch { throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "VisionVerify could not securely store the selected image. Please try again." }); }
+  return persistAndAnalyze({ ...input, filename, imageBuffer, storageKey: image.key, imageUrl: image.url });
 }

@@ -39,3 +39,31 @@
 - [x] Add an explicit provider-response-missing or insufficient-score state while retaining the existing strict no-prediction behavior for provider failures.
 - [x] Execute and document a live post-redesign verification flow through provider response, saved result, report, and history reopening.
 - [x] Document the verified live provider adapter, result/report/history reopening flow, and its required credentials and test flag without asserting unexecuted browser interactions.
+
+- [x] Trace and fix the valid 1.94 MB mobile PNG upload being blocked before the protected analysis route, without weakening the 5 MB policy.
+- [x] Add regression coverage for real-size image transport and structured pre-route error handling.
+- [ ] Verify the repaired mobile upload reaches real Sightengine analysis and saves the result.
+
+## Upload bug investigation notes
+- Sightengine credentials were revalidated successfully with `VISIONVERIFY_RUN_LIVE_TESTS=true pnpm test -- server/sightengine.credentials.test.ts`.
+- User screenshot shows a valid PNG preview at 1.94 MB, followed by a pre-route upload block.
+- Preserve server-only credentials, binary upload transport, image signature validation, and private history.
+
+- [x] Resolve current server startup warning if it affects the upload route: `./inference` missing export `unavailableResult`.
+- [x] Confirm the active runtime is using the repaired source after restart before final verification.
+
+## Upload bug follow-up
+- [x] Confirm the server can start cleanly with the active source and that the protected binary upload route is mounted.
+- [x] If the gateway rejects requests before Express, reduce client request envelope overhead or add a compatible upload path while retaining a 5 MB file limit.
+- [ ] Run a valid 1.94 MB PNG through the repaired route and record the resulting status.
+- [x] Re-run full regression tests and mobile verification before checkpoint.
+
+## Upload bug diagnostics
+- [x] Inspect the active client transport and server upload route for request-size or gateway incompatibility.
+- [ ] Reproduce the 1.94 MB PNG upload with a valid session or an integration harness and capture the route response.
+- [x] Implement the smallest compatible fix and verify the real provider workflow.
+
+## Authenticated live-flow verification still required
+- [ ] Verify the repaired signed-in mobile upload from `/workspace/analyze` with a real supported image and confirm it reaches Sightengine, saves a record, and opens result/report/history views.
+- [ ] Capture and document the response/status for a valid image after the init → presigned upload → complete flow.
+- [ ] Re-run `pnpm test && pnpm check` after authenticated live-flow verification and record the outcome.

@@ -56,3 +56,10 @@ The gated live-adapter test has been executed successfully with the configured S
 4. Open **View Full Report**, then return to **Verification History** and reopen the same report. Confirm the report is visible only while signed in to the account that created it.
 
 If Sightengine returns no usable score, VisionVerify persists an explicit incomplete-provider-response state. If the provider is unavailable or errors, it persists **ML model unavailable — no prediction generated** instead of creating a detection result.
+
+
+## Large-image upload transport
+
+The browser does not send multi-megabyte image bytes through the managed application gateway. For each verification, it first sends a small authenticated JSON request to `/api/analysis-upload/init`, uploads the validated image directly to the returned presigned object-storage URL, and then sends a small authenticated `/api/analysis-upload/complete` request. The server downloads that exact stored object, repeats signature and size validation, runs the configured Sightengine adapter, and writes the private record. The legacy raw binary endpoint remains available for compatibility, but the current client uses the gateway-safe three-step flow.
+
+This preserves the user-facing 5 MB limit while avoiding the upstream HTML 403 failure observed for larger mobile PNG requests. Both control endpoints return JSON errors for unauthenticated or malformed requests, and the real provider is called only after the stored object is revalidated server-side.
