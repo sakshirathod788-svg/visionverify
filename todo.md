@@ -27,3 +27,15 @@
 - [x] Trace and fix the analysis submission mutation that receives an HTML response instead of a structured tRPC result.
 - [x] Add regression coverage for server-side analysis mutation failures so the client receives a structured error message rather than a JSON parse error.
 - [x] Add automated server endpoint coverage proving invalid binary upload requests return structured JSON error objects.
+- [x] Make “Verify an Image” the primary product action and provide an upload-first verification entry point with preview, formats, size, and secure-processing information.
+- [x] Add an honest live-analysis screen that exposes only actual upload, provider-request, and report-creation states.
+- [x] Create a dedicated verification result and full-report experience that translates provider-returned scores into clearly scoped user-facing states without fabricating missing fields.
+- [x] Add progressive technical-details disclosure, provider information, timestamp, image metadata, raw score evidence, and the required probabilistic-results disclaimer.
+- [x] Redesign the private history view as “Verification History” with report-oriented search, filters, status badges, real score availability, and report reopening.
+- [x] Add polished empty, unsupported-file, upload-failure, provider-failure, missing-response, no-confidence, and inconclusive states while preserving real Sightengine-only results.
+- [x] Test the end-to-end verification flow, saved report reopening, unavailable-model behavior, invalid files, and mobile responsiveness without using mock detection results.
+- [x] Apply “Verify an Image” wording consistently to the workspace dashboard upload card and all remaining primary entry surfaces.
+- [x] Add a transparent, documented score-to-state presentation using only provider-returned score thresholds and show it consistently in result, report, and history views.
+- [x] Add an explicit provider-response-missing or insufficient-score state while retaining the existing strict no-prediction behavior for provider failures.
+- [x] Execute and document a live post-redesign verification flow through provider response, saved result, report, and history reopening.
+- [x] Document the verified live provider adapter, result/report/history reopening flow, and its required credentials and test flag without asserting unexecuted browser interactions.

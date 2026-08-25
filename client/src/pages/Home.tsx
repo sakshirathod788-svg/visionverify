@@ -44,7 +44,7 @@ export default function Home() {
             <h1 className="font-display mt-6 max-w-3xl text-5xl leading-[0.98] tracking-[-0.04em] text-white sm:text-6xl lg:text-7xl">See beyond<br /><em className="text-violet-200">the pixels.</em></h1>
             <p className="mt-7 max-w-xl text-base leading-7 text-zinc-400 sm:text-lg">VisionVerify is a research-oriented interface for evaluating an image through an attached authenticity model—presenting uncertain findings honestly, with traceable model context.</p>
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-              <Link href={workspaceHref}><Button className="h-12 w-full rounded-xl bg-violet-200 px-6 text-sm font-semibold text-violet-950 hover:bg-white sm:w-auto">Analyze an image <ArrowRight className="ml-2 h-4 w-4" /></Button></Link>
+              <Link href={workspaceHref}><Button className="h-12 w-full rounded-xl bg-violet-200 px-6 text-sm font-semibold text-violet-950 hover:bg-white sm:w-auto">Verify an Image <ArrowRight className="ml-2 h-4 w-4" /></Button></Link>
               <Link href="/technology"><Button variant="outline" className="h-12 w-full rounded-xl border-white/14 bg-white/[0.03] px-6 text-sm text-zinc-200 hover:bg-white/8 hover:text-white sm:w-auto">Explore methodology</Button></Link>
             </div>
             <div className="mt-8"><ModelStatusBadge state={state.data} withMessage /></div>

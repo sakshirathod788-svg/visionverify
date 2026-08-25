@@ -7,7 +7,7 @@ import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { VisionMark } from "./VisionMark";
 
-const nav = [{ label: "Analyze Image", href: "/workspace/analyze", icon: Activity }, { label: "History", href: "/workspace/history", icon: History }, { label: "Technology", href: "/technology", icon: BookOpen }, { label: "About", href: "/about", icon: ShieldCheck }];
+const nav = [{ label: "Verify", href: "/workspace/analyze", icon: Activity }, { label: "History", href: "/workspace/history", icon: History }, { label: "Technology", href: "/technology", icon: BookOpen }, { label: "About", href: "/about", icon: ShieldCheck }];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, logout } = useAuth(); const [location] = useLocation(); const [open, setOpen] = useState(false);

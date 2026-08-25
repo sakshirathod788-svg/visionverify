@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { createAnalysis } from "./db";
-import { getInferenceState, type InferenceResult, runLiveInference } from "./inference";
+import { getInferenceState, InferenceRequestError, type InferenceResult, runLiveInference } from "./inference";
 import { storagePut } from "./storage";
 
 export const allowedImageMimeTypes = ["image/jpeg", "image/png", "image/webp"] as const;
@@ -58,8 +58,10 @@ export async function submitImageAnalysis(input: { userId: number; filename: str
     inference = await runLiveInference({ buffer: imageBuffer, filename, mimeType: input.mimeType });
   } catch (error) {
     const message = error instanceof Error ? error.message : "ML model unavailable — no prediction generated.";
-    const id = await createAnalysis({ userId: input.userId, storageKey: image.key, imageUrl: image.url, filename, mimeType: input.mimeType, byteSize: imageBuffer.length, status: "failed", prediction: "unable_to_analyze", modelMode: "live", modelName: "ML model unavailable", analysisData: { note: message } });
-    return { id, status: "failed" as const, prediction: "unable_to_analyze" as const, confidencePercent: null, manipulationProbabilityPercent: null, modelMode: "live" as const, modelName: "ML model unavailable", modelVersion: null, evidence: {}, note: message };
+    const incompleteResponse = error instanceof InferenceRequestError && error.reason === "incomplete_response";
+    const modelName = incompleteResponse ? "Provider response incomplete" : "ML model unavailable";
+    const id = await createAnalysis({ userId: input.userId, storageKey: image.key, imageUrl: image.url, filename, mimeType: input.mimeType, byteSize: imageBuffer.length, status: "failed", prediction: "unable_to_analyze", modelMode: "live", modelName, analysisData: { note: message, providerResponseState: incompleteResponse ? "missing_score" : "provider_unavailable" } });
+    return { id, status: "failed" as const, prediction: "unable_to_analyze" as const, confidencePercent: null, manipulationProbabilityPercent: null, modelMode: "live" as const, modelName, modelVersion: null, evidence: {}, note: message };
   }
   const id = await createAnalysis({ userId: input.userId, storageKey: image.key, imageUrl: image.url, filename, mimeType: input.mimeType, byteSize: imageBuffer.length, status: "completed", prediction: null, confidencePercent: inference.confidencePercent, manipulationProbabilityPercent: inference.manipulationProbabilityPercent, modelMode: "live", modelName: inference.modelName, modelVersion: inference.modelVersion, analysisData: { evidence: inference.evidence, providerTimestamp: inference.providerTimestamp } });
   return { id, status: "completed" as const, prediction: null, modelMode: "live" as const, ...inference, note: null };

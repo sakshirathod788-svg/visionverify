@@ -52,10 +52,12 @@ const sightengineResponseSchema = z.object({
 
 export class InferenceRequestError extends Error {
   public readonly safeMessage: string;
+  public readonly reason: "provider_unavailable" | "incomplete_response";
 
-  constructor(safeMessage: string) {
+  constructor(safeMessage: string, reason: "provider_unavailable" | "incomplete_response" = "provider_unavailable") {
     super(safeMessage);
     this.safeMessage = safeMessage;
+    this.reason = reason;
   }
 }
 
@@ -175,7 +177,7 @@ export async function runLiveInference(input: {
   const deepfakeScore = parsed.data.type?.deepfake;
   const aiGeneratedScore = parsed.data.type?.ai_generated;
   if (deepfakeScore === undefined && aiGeneratedScore === undefined) {
-    throw new InferenceRequestError("The ML model returned no usable detection score. No prediction was generated.");
+    throw new InferenceRequestError("The ML model returned no usable detection score. No prediction was generated.", "incomplete_response");
   }
 
   const providerTimestamp = parsed.data.request?.timestamp
