@@ -52,7 +52,13 @@ export async function createAnalysis(values: InsertAnalysis): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const result = await db.insert(analyses).values(values);
-  return Number((result as unknown as { insertId: number }).insertId);
+  const raw = result as unknown as { insertId?: number | string } | ArrayLike<{ insertId?: number | string }>;
+  const insertId = typeof (raw as { insertId?: number | string }).insertId !== "undefined"
+    ? (raw as { insertId?: number | string }).insertId
+    : (raw as ArrayLike<{ insertId?: number | string }>)[0]?.insertId;
+  const id = Number(insertId);
+  if (!Number.isInteger(id) || id <= 0) throw new Error("Database did not return a valid analysis record ID");
+  return id;
 }
 
 export async function listAnalysesByUserId(userId: number, limit = 100): Promise<Analysis[]> {

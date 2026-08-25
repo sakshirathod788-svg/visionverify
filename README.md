@@ -63,3 +63,18 @@ If Sightengine returns no usable score, VisionVerify persists an explicit incomp
 The browser does not send multi-megabyte image bytes through the managed application gateway. For each verification, it first sends a small authenticated JSON request to `/api/analysis-upload/init`, uploads the validated image directly to the returned presigned object-storage URL, and then sends a small authenticated `/api/analysis-upload/complete` request. The server downloads that exact stored object, repeats signature and size validation, runs the configured Sightengine adapter, and writes the private record. The legacy raw binary endpoint remains available for compatibility, but the current client uses the gateway-safe three-step flow.
 
 This preserves the user-facing 5 MB limit while avoiding the upstream HTML 403 failure observed for larger mobile PNG requests. Both control endpoints return JSON errors for unauthenticated or malformed requests, and the real provider is called only after the stored object is revalidated server-side.
+
+
+## Mobile upload regression record
+
+On 2026-08-25, the available PNG was submitted through a signed local regression session using the current gateway-safe flow. The image was 313,423 bytes; the authenticated init request returned `200`, the direct presigned-storage upload returned `200`, and the authenticated completion request returned `200`. VisionVerify received a real live Sightengine response with provider timestamp `2026-08-25T16:30:07.130Z` and retained the provider evidence keys `deepfake_score_percent`, `ai_generated_probability_percent`, and `provider_request_id`. The saved record was reopened through the private detail procedure and was found again in the private history list. The larger-payload route regression separately exercises a 1.9 MB PNG body and confirms JSON route handling. This verifies the programmatic upload, persistence, detail, and history path; it does not replace the user’s own mobile-browser visual check.
+
+
+## Gated client-helper regression
+
+For environments without a desktop browser, the actual client upload helper can be exercised against the running app with a signed test session: `VISIONVERIFY_RUN_LIVE_UPLOAD_TESTS=1 VISIONVERIFY_TEST_OPEN_ID=<existing-user-open-id> pnpm vitest run client/src/lib/analysisUpload.e2e.test.ts`. This test uses the available supported PNG when present, follows the browser helper’s init → direct presigned upload → complete sequence, verifies a live Sightengine-backed completed result with a positive saved id, and reopens that id through the private detail and history procedures. The test requires the existing server environment values `JWT_SECRET` and `VITE_APP_ID`; it does not expose provider credentials.
+
+
+## Report route and private record contract
+
+The client route `/workspace/report/:id` is intentionally wired to `AnalysisDetail`. It reads the record through the protected `analysis.get` procedure, which returns the same `analysisView` contract used by the history and report-oriented surfaces. That procedure applies the signed-in user boundary with `getAnalysisByIdForUser`, so a report id is only readable when its `userId` belongs to the current authenticated account. The route itself is a client-rendered screen; the record privacy boundary is enforced by the server procedure rather than by hiding a URL.
