@@ -107,3 +107,12 @@
 - [x] Capture the current init, direct-storage, and completion statuses after a clean app-shell refresh and provider run.
 - [x] Document the exact mobile refresh and re-open steps required for an already-cached preview tab.
 - [x] Capture and record explicit HTTP 200 statuses for init, direct presigned storage upload, and completion after a clean app-shell refresh: shell 200, init 200, storage 200, complete 200.
+
+## Mobile gateway rejection reported after final checkpoint
+- [x] Reproduce the phone-reported "upload image is blocked before reaching VisionVerify" response against the currently served mobile flow.
+- [x] Identify which request, header, URL, or gateway policy causes the pre-route rejection without weakening authentication or the 5 MB limit.
+- [x] Implement and test the smallest compatible fix while preserving direct storage and real Sightengine analysis.
+- [x] Re-run explicit stage-status evidence, full regression checks, and responsive verification before a new checkpoint.
+- [x] Confirmed from the latest mobile network trace: `/api/analysis-upload/init` returns 200, then the cross-origin presigned S3 PUT fails with `TypeError: Failed to fetch`; completion is never reached.
+- [x] Add a same-origin chunked storage fallback for browsers that cannot use the presigned PUT because of storage CORS, with bounded JSON chunks and server-side revalidation.
+- [x] Add client and server regression coverage for the chunked fallback and preserve the existing direct presigned path when it succeeds.

@@ -83,3 +83,8 @@ The client route `/workspace/report/:id` is intentionally wired to `AnalysisDeta
 ## Mobile recovery after an older preview tab
 
 If a mobile tab was open before the gateway-safe upload fix, close that tab completely and reopen the current VisionVerify preview URL from the project’s Preview action. Navigate again to `/workspace/analyze`, wait for the model-status badge to load, choose the image, and press **Verify Image**. The extensionless app-shell response is now `Cache-Control: no-store, max-age=0`, so a normal reload should receive the current client bundle. If the tab still shows the old pre-route upload message, open the browser menu, choose Reload, then close and reopen the tab before retrying. A valid signed-in session is still required; the server intentionally rejects unauthenticated init and completion requests.
+
+
+## Mobile storage transfer fallback
+
+The browser may successfully receive the upload-init response but still be unable to issue the cross-origin presigned S3 `PUT` when the storage endpoint does not expose the required browser CORS policy. VisionVerify now detects that transfer failure and retries through authenticated same-origin `/api/analysis-upload/chunk` requests, each limited to 192 KiB of binary data encoded in a bounded JSON envelope. The server stores each part, reassembles the parts, revalidates the final JPEG, PNG, or WEBP signature and 5 MB limit, stores the final image, and only then calls the real Sightengine adapter. The direct presigned path remains available when the browser can complete it.

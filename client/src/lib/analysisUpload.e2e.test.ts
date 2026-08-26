@@ -27,12 +27,15 @@ describe("live client upload flow", () => {
     expect(shellResponse.status).toBe(200);
     expect(shellResponse.headers.get("cache-control")).toBe("no-store, max-age=0");
     const stageStatuses: string[] = [];
+    const forceChunkFallback = process.env.VISIONVERIFY_FORCE_CHUNK_FALLBACK === "1";
     globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       const target = typeof input === "string" && input.startsWith("/") ? `${baseUrl}${input}` : input;
-      const response = await nativeFetch(target, init);
       const method = init?.method ?? "GET";
       const url = String(target);
+      if (forceChunkFallback && method === "PUT") throw new TypeError("Failed to fetch");
+      const response = await nativeFetch(target, init);
       if (url.includes("/api/analysis-upload/init")) stageStatuses.push(`init ${response.status}`);
+      else if (url.includes("/api/analysis-upload/chunk")) stageStatuses.push(`chunk ${response.status}`);
       else if (url.includes("/api/analysis-upload/complete")) stageStatuses.push(`complete ${response.status}`);
       else if (method === "PUT") stageStatuses.push(`storage ${response.status}`);
       return response;
@@ -55,7 +58,14 @@ describe("live client upload flow", () => {
     const file = new File([source], "client-helper-live.png", { type: "image/png" });
     const result = await uploadAndAnalyzeImage({ file, filename: file.name, mimeType: "image/png" });
 
-    expect(stageStatuses).toEqual(["init 200", "storage 200", "complete 200"]);
+    if (forceChunkFallback) {
+      expect(stageStatuses[0]).toBe("init 200");
+      expect(stageStatuses.at(-1)).toBe("complete 200");
+      expect(stageStatuses.slice(1, -1).length).toBe(Math.ceil(file.size / (192 * 1024)));
+      expect(stageStatuses.slice(1, -1).every((status) => status === "chunk 200")).toBe(true);
+    } else {
+      expect(stageStatuses).toEqual(["init 200", "storage 200", "complete 200"]);
+    }
     console.info(`[live upload statuses] shell ${shellResponse.status}; ${stageStatuses.join("; ")}`);
     expect(result.id).toBeGreaterThan(0);
     expect(result.status).toBe("completed");

@@ -5,6 +5,7 @@ import { storagePresignPut, storagePut, storageReadBuffer } from "./storage";
 
 export const allowedImageMimeTypes = ["image/jpeg", "image/png", "image/webp"] as const;
 export type AllowedImageMimeType = (typeof allowedImageMimeTypes)[number];
+export const uploadChunkBytes = 192 * 1024;
 
 export function isAllowedImageMimeType(value: string | undefined): value is AllowedImageMimeType {
   return Boolean(value && (allowedImageMimeTypes as readonly string[]).includes(value));
@@ -71,6 +72,30 @@ export async function completeDirectImageUpload(input: { userId: number; filenam
   let imageBuffer: Buffer;
   try { imageBuffer = await storageReadBuffer(input.storageKey); } catch { throw new TRPCError({ code: "BAD_REQUEST", message: "VisionVerify could not read the uploaded image. Please try again." }); }
   return persistAndAnalyze({ ...input, imageBuffer });
+}
+
+export async function storeImageUploadChunk(input: { userId: number; storageKey: string; chunkIndex: number; chunkData: string }) {
+  if (!Number.isInteger(input.chunkIndex) || input.chunkIndex < 0 || input.chunkIndex > 31) throw new TRPCError({ code: "BAD_REQUEST", message: "The upload chunk sequence is invalid." });
+  if (typeof input.chunkData !== "string" || !input.chunkData || input.chunkData.length > Math.ceil(uploadChunkBytes / 3) * 4 + 8) throw new TRPCError({ code: "BAD_REQUEST", message: "The upload chunk is invalid." });
+  let bytes: Buffer;
+  try { bytes = Buffer.from(input.chunkData, "base64"); } catch { throw new TRPCError({ code: "BAD_REQUEST", message: "The upload chunk is invalid." }); }
+  if (!bytes.length || bytes.length > uploadChunkBytes) throw new TRPCError({ code: "BAD_REQUEST", message: "The upload chunk is invalid." });
+  if (!input.storageKey.startsWith(`visionverify/${input.userId}/`)) throw new TRPCError({ code: "BAD_REQUEST", message: "The uploaded image could not be verified." });
+  const stored = await storagePut(`${input.storageKey}.part-${input.chunkIndex}`, bytes, "application/octet-stream");
+  return { key: stored.key, chunkIndex: input.chunkIndex };
+}
+
+export async function completeChunkedImageUpload(input: { userId: number; filename: string; mimeType: AllowedImageMimeType; storageKey: string; imageUrl: string; chunkKeys: string[] }) {
+  if (!input.chunkKeys.length || input.chunkKeys.length > 32 || input.chunkKeys.some((key) => typeof key !== "string" || !key.startsWith(`visionverify/${input.userId}/`))) throw new TRPCError({ code: "BAD_REQUEST", message: "The uploaded image could not be verified." });
+  let imageBuffer: Buffer;
+  try {
+    const chunks = await Promise.all(input.chunkKeys.map((key) => storageReadBuffer(key, uploadChunkBytes)));
+    imageBuffer = Buffer.concat(chunks);
+  } catch { throw new TRPCError({ code: "BAD_REQUEST", message: "VisionVerify could not read the uploaded image. Please try again." }); }
+  const validated = validateImageBuffer(imageBuffer, input.mimeType);
+  let stored: { key: string; url: string };
+  try { stored = await storagePut(input.storageKey, validated, input.mimeType); } catch { throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "VisionVerify could not securely store the selected image. Please try again." }); }
+  return persistAndAnalyze({ ...input, storageKey: stored.key, imageUrl: `/manus-storage/${stored.key}`, imageBuffer: validated });
 }
 
 export async function submitImageAnalysis(input: { userId: number; filename: string; mimeType: AllowedImageMimeType; imageBuffer: Buffer }) {

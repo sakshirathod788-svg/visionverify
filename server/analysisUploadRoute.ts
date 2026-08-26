@@ -1,5 +1,5 @@
 import express, { type Express, type Request, type Response } from "express";
-import { completeDirectImageUpload, isAllowedImageMimeType, prepareDirectImageUpload, submitImageAnalysis } from "./analysisService";
+import { completeChunkedImageUpload, completeDirectImageUpload, isAllowedImageMimeType, prepareDirectImageUpload, storeImageUploadChunk, submitImageAnalysis } from "./analysisService";
 import { sdk } from "./_core/sdk";
 
 function safeJsonError(error: unknown) {
@@ -39,12 +39,28 @@ export async function analysisUploadInitHandler(req: Request, res: Response) {
   }
 }
 
+export async function analysisUploadChunkHandler(req: Request, res: Response) {
+  try {
+    const user = await sdk.authenticateRequest(req);
+    const { storageKey, chunkIndex, chunkData } = req.body ?? {};
+    if (typeof storageKey !== "string" || !Number.isInteger(chunkIndex) || typeof chunkData !== "string") return res.status(400).json({ error: { message: "The upload chunk is invalid." } });
+    const result = await storeImageUploadChunk({ userId: user.id, storageKey, chunkIndex, chunkData });
+    return res.status(200).json(result);
+  } catch (error) {
+    const { status, body } = safeJsonError(error);
+    console.error("[Analysis upload chunk]", error);
+    return res.status(status).json(body);
+  }
+}
+
 export async function analysisUploadCompleteHandler(req: Request, res: Response) {
   try {
     const user = await sdk.authenticateRequest(req);
-    const { filename, mimeType, storageKey, imageUrl } = req.body ?? {};
+    const { filename, mimeType, storageKey, imageUrl, chunkKeys } = req.body ?? {};
     if (typeof filename !== "string" || !isAllowedImageMimeType(mimeType) || typeof storageKey !== "string" || typeof imageUrl !== "string" || !storageKey.startsWith(`visionverify/${user.id}/`)) return res.status(400).json({ error: { message: "The uploaded image could not be verified." } });
-    const result = await completeDirectImageUpload({ userId: user.id, filename, mimeType, storageKey, imageUrl });
+    const result = Array.isArray(chunkKeys)
+      ? await completeChunkedImageUpload({ userId: user.id, filename, mimeType, storageKey, imageUrl, chunkKeys })
+      : await completeDirectImageUpload({ userId: user.id, filename, mimeType, storageKey, imageUrl });
     return res.status(200).json(result);
   } catch (error) {
     const { status, body } = safeJsonError(error);
@@ -55,6 +71,7 @@ export async function analysisUploadCompleteHandler(req: Request, res: Response)
 
 export function registerAnalysisUploadRoute(app: Express) {
   app.post("/api/analysis-upload/init", express.json({ limit: "16kb" }), analysisUploadInitHandler);
+  app.post("/api/analysis-upload/chunk", express.json({ limit: "512kb" }), analysisUploadChunkHandler);
   app.post("/api/analysis-upload/complete", express.json({ limit: "16kb" }), analysisUploadCompleteHandler);
   app.post("/api/analysis-upload", express.raw({ type: ["image/jpeg", "image/png", "image/webp"], limit: "5mb" }), analysisUploadHandler);
 }

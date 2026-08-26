@@ -49,13 +49,17 @@ describe("analysis upload endpoint", () => {
     stop = () => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
 
     const initResponse = await fetch(`http://127.0.0.1:${address.port}/api/analysis-upload/init`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ filename: "mobile.png", mimeType: "image/png", byteSize: 1_900_000 }) });
+    const chunkResponse = await fetch(`http://127.0.0.1:${address.port}/api/analysis-upload/chunk`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ storageKey: "visionverify/1/mobile.png_hash", chunkIndex: 0, chunkData: "c2FtcGxl" }) });
     const completeResponse = await fetch(`http://127.0.0.1:${address.port}/api/analysis-upload/complete`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ filename: "mobile.png", mimeType: "image/png", storageKey: "visionverify/1/mobile.png_hash", imageUrl: "/manus-storage/visionverify/1/mobile.png_hash" }) });
 
     expect(initResponse.status).toBe(401);
     expect(initResponse.headers.get("content-type")).toContain("application/json");
+    expect(chunkResponse.status).toBe(401);
+    expect(chunkResponse.headers.get("content-type")).toContain("application/json");
     expect(completeResponse.status).toBe(401);
     expect(completeResponse.headers.get("content-type")).toContain("application/json");
     await expect(initResponse.json()).resolves.toEqual({ error: { message: "Invalid session cookie" } });
+    await expect(chunkResponse.json()).resolves.toEqual({ error: { message: "Invalid session cookie" } });
     await expect(completeResponse.json()).resolves.toEqual({ error: { message: "Invalid session cookie" } });
   });
 });
