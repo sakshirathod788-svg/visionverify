@@ -23,9 +23,19 @@ describe("live client upload flow", () => {
   runLive("uploads through init, direct storage, completion, and reopens the private record", async () => {
     const token = await signTestSession();
     const nativeFetch = globalThis.fetch;
-    globalThis.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
-      if (typeof input === "string" && input.startsWith("/")) return nativeFetch(`${baseUrl}${input}`, init);
-      return nativeFetch(input, init);
+    const shellResponse = await nativeFetch(`${baseUrl}/workspace/analyze`, { cache: "no-store" });
+    expect(shellResponse.status).toBe(200);
+    expect(shellResponse.headers.get("cache-control")).toBe("no-store, max-age=0");
+    const stageStatuses: string[] = [];
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const target = typeof input === "string" && input.startsWith("/") ? `${baseUrl}${input}` : input;
+      const response = await nativeFetch(target, init);
+      const method = init?.method ?? "GET";
+      const url = String(target);
+      if (url.includes("/api/analysis-upload/init")) stageStatuses.push(`init ${response.status}`);
+      else if (url.includes("/api/analysis-upload/complete")) stageStatuses.push(`complete ${response.status}`);
+      else if (method === "PUT") stageStatuses.push(`storage ${response.status}`);
+      return response;
     };
     (globalThis as typeof globalThis & { sessionStorage: Storage }).sessionStorage = {
       getItem: (key: string) => key === "manus-cookie" ? `${COOKIE_NAME}=${token}` : null,
@@ -45,6 +55,8 @@ describe("live client upload flow", () => {
     const file = new File([source], "client-helper-live.png", { type: "image/png" });
     const result = await uploadAndAnalyzeImage({ file, filename: file.name, mimeType: "image/png" });
 
+    expect(stageStatuses).toEqual(["init 200", "storage 200", "complete 200"]);
+    console.info(`[live upload statuses] shell ${shellResponse.status}; ${stageStatuses.join("; ")}`);
     expect(result.id).toBeGreaterThan(0);
     expect(result.status).toBe("completed");
     expect(result.modelMode).toBe("live");

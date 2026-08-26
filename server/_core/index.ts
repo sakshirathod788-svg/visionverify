@@ -7,6 +7,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { registerAnalysisUploadRoute } from "../analysisUploadRoute";
+import { applyAppShellNoCache } from "../appShellCache";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 
@@ -31,6 +32,9 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 
 async function startServer() {
   const app = express();
+  // Do not let hosted preview browsers keep an older HTML shell after a client-flow fix.
+  // Hashed JS/CSS assets remain cacheable; only extensionless app routes are no-store.
+  app.use(applyAppShellNoCache);
   const server = createServer(app);
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));

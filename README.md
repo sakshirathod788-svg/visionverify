@@ -78,3 +78,8 @@ For environments without a desktop browser, the actual client upload helper can 
 ## Report route and private record contract
 
 The client route `/workspace/report/:id` is intentionally wired to `AnalysisDetail`. It reads the record through the protected `analysis.get` procedure, which returns the same `analysisView` contract used by the history and report-oriented surfaces. That procedure applies the signed-in user boundary with `getAnalysisByIdForUser`, so a report id is only readable when its `userId` belongs to the current authenticated account. The route itself is a client-rendered screen; the record privacy boundary is enforced by the server procedure rather than by hiding a URL.
+
+
+## Mobile recovery after an older preview tab
+
+If a mobile tab was open before the gateway-safe upload fix, close that tab completely and reopen the current VisionVerify preview URL from the project’s Preview action. Navigate again to `/workspace/analyze`, wait for the model-status badge to load, choose the image, and press **Verify Image**. The extensionless app-shell response is now `Cache-Control: no-store, max-age=0`, so a normal reload should receive the current client bundle. If the tab still shows the old pre-route upload message, open the browser menu, choose Reload, then close and reopen the tab before retrying. A valid signed-in session is still required; the server intentionally rejects unauthenticated init and completion requests.

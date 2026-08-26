@@ -86,3 +86,24 @@
 ## Report-route contract documentation
 - [x] Document that `/workspace/report/:id` renders `AnalysisDetail` and uses the same private `analysis.get` contract and user-ownership authorization boundary.
 - [x] Re-run `pnpm test && pnpm check` after adding the report-route documentation.
+
+## Repeated verification failure
+- [x] Reproduce the current mobile verification failure with the available PNG and capture the exact client, route, storage, and provider response stages.
+- [x] Fix the confirmed failure without weakening the 5 MB policy or replacing real Sightengine results with fabricated output.
+- [x] Add regression coverage for the failing stage and re-run live, persistence, and responsive checks.
+
+## Repeated mobile verification authentication gap
+- [x] Confirm the authenticated preview session is supplied by the existing signed harness; do not add a token persistence fallback that could weaken the current cookie boundary.
+- [x] Make upload control requests explicitly bypass browser caches for init and completion while retaining same-origin cookies and structured response checks.
+- [x] Ensure the analyze screen surfaces upload/auth/provider errors and resets the submitting state; map invalid-session responses to actionable mobile guidance.
+- [x] Add regression coverage for structured upload errors and successful client-helper paths, then rerun the live signed test.
+
+## Stale preview response mitigation
+- [x] Prevent the HTML preview shell from being cached so mobile browsers receive the current upload client bundle after the direct-storage fix.
+- [x] Restart the server, verify the current client transport is served, and rerun live client-helper and full regression tests.
+
+## Fresh mobile-flow evidence
+- [x] Add an automated regression asserting extensionless app-shell routes return `Cache-Control: no-store, max-age=0`.
+- [x] Capture the current init, direct-storage, and completion statuses after a clean app-shell refresh and provider run.
+- [x] Document the exact mobile refresh and re-open steps required for an already-cached preview tab.
+- [x] Capture and record explicit HTTP 200 statuses for init, direct presigned storage upload, and completion after a clean app-shell refresh: shell 200, init 200, storage 200, complete 200.
