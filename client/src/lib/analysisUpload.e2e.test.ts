@@ -26,18 +26,20 @@ describe("live client upload flow", () => {
     const shellResponse = await nativeFetch(`${baseUrl}/workspace/analyze`, { cache: "no-store" });
     expect(shellResponse.status).toBe(200);
     expect(shellResponse.headers.get("cache-control")).toBe("no-store, max-age=0");
-    const stageStatuses: string[] = [];
+    const stageBatches: string[][] = [];
+    let activeStageStatuses: string[] = [];
     const forceChunkFallback = process.env.VISIONVERIFY_FORCE_CHUNK_FALLBACK === "1";
+    const repeatCount = Math.max(1, Number.parseInt(process.env.VISIONVERIFY_TEST_REPEAT_COUNT ?? "1", 10) || 1);
     globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       const target = typeof input === "string" && input.startsWith("/") ? `${baseUrl}${input}` : input;
       const method = init?.method ?? "GET";
       const url = String(target);
       if (forceChunkFallback && method === "PUT") throw new TypeError("Failed to fetch");
       const response = await nativeFetch(target, init);
-      if (url.includes("/api/analysis-upload/init")) stageStatuses.push(`init ${response.status}`);
-      else if (url.includes("/api/analysis-upload/chunk")) stageStatuses.push(`chunk ${response.status}`);
-      else if (url.includes("/api/analysis-upload/complete")) stageStatuses.push(`complete ${response.status}`);
-      else if (method === "PUT") stageStatuses.push(`storage ${response.status}`);
+      if (url.includes("/api/analysis-upload/init")) activeStageStatuses.push(`init ${response.status}`);
+      else if (url.includes("/api/analysis-upload/chunk")) activeStageStatuses.push(`chunk ${response.status}`);
+      else if (url.includes("/api/analysis-upload/complete")) activeStageStatuses.push(`complete ${response.status}`);
+      else if (method === "PUT") activeStageStatuses.push(`storage ${response.status}`);
       return response;
     };
     (globalThis as typeof globalThis & { sessionStorage: Storage }).sessionStorage = {
@@ -50,23 +52,33 @@ describe("live client upload flow", () => {
     } as Storage;
 
     let source: ArrayBuffer | Buffer;
+    const fixturePath = process.env.VISIONVERIFY_TEST_IMAGE_PATH ?? "/home/ubuntu/upload/Screenshot_20260825-183951.png";
     try {
-      source = await fs.readFile("/home/ubuntu/upload/Screenshot_20260825-183951.png");
+      source = await fs.readFile(fixturePath);
     } catch {
       source = await (await nativeFetch("https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/Fronalpstock_big.jpg/320px-Fronalpstock_big.jpg")).arrayBuffer();
     }
-    const file = new File([source], "client-helper-live.png", { type: "image/png" });
-    const result = await uploadAndAnalyzeImage({ file, filename: file.name, mimeType: "image/png" });
-
-    if (forceChunkFallback) {
-      expect(stageStatuses[0]).toBe("init 200");
-      expect(stageStatuses.at(-1)).toBe("complete 200");
-      expect(stageStatuses.slice(1, -1).length).toBe(Math.ceil(file.size / (192 * 1024)));
-      expect(stageStatuses.slice(1, -1).every((status) => status === "chunk 200")).toBe(true);
-    } else {
-      expect(stageStatuses).toEqual(["init 200", "storage 200", "complete 200"]);
+    const file = new File([source], process.env.VISIONVERIFY_TEST_IMAGE_NAME ?? "client-helper-live.png", { type: "image/png" });
+    const results = [];
+    for (let iteration = 0; iteration < repeatCount; iteration += 1) {
+      activeStageStatuses = [];
+      results.push(await uploadAndAnalyzeImage({ file, filename: file.name, mimeType: "image/png" }));
+      stageBatches.push([...activeStageStatuses]);
     }
-    console.info(`[live upload statuses] shell ${shellResponse.status}; ${stageStatuses.join("; ")}`);
+    const result = results.at(-1)!;
+
+    expect(stageBatches).toHaveLength(repeatCount);
+    for (const stageStatuses of stageBatches) {
+      if (forceChunkFallback) {
+        expect(stageStatuses[0]).toBe("init 200");
+        expect(stageStatuses.at(-1)).toBe("complete 200");
+        expect(stageStatuses.slice(1, -1).length).toBe(Math.ceil(file.size / (80 * 1024)));
+        expect(stageStatuses.slice(1, -1).every((status) => status === "chunk 200")).toBe(true);
+      } else {
+        expect(stageStatuses).toEqual(["init 200", "storage 200", "complete 200"]);
+      }
+    }
+    console.info(`[live upload statuses] shell ${shellResponse.status}; repeats ${repeatCount}; ${stageBatches.map((batch, index) => `upload ${index + 1}: ${batch.join("; ")}`).join(" | ")}`);
     expect(result.id).toBeGreaterThan(0);
     expect(result.status).toBe("completed");
     expect(result.modelMode).toBe("live");
@@ -90,5 +102,5 @@ describe("live client upload flow", () => {
     const reportRouteResponse = await nativeFetch(`${baseUrl}/workspace/report/${result.id}`, { headers: { Authorization: `Bearer ${token}` } });
     expect(reportRouteResponse.ok).toBe(true);
     expect(await reportRouteResponse.text()).toContain('id="root"');
-  }, 20_000);
+  }, 120_000);
 });

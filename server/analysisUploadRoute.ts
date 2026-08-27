@@ -71,7 +71,7 @@ export async function analysisUploadCompleteHandler(req: Request, res: Response)
 
 export function registerAnalysisUploadRoute(app: Express) {
   app.post("/api/analysis-upload/init", express.json({ limit: "16kb" }), analysisUploadInitHandler);
-  app.post("/api/analysis-upload/chunk", express.json({ limit: "512kb" }), analysisUploadChunkHandler);
+  app.post("/api/analysis-upload/chunk", express.json({ limit: "160kb" }), analysisUploadChunkHandler);
   app.post("/api/analysis-upload/complete", express.json({ limit: "16kb" }), analysisUploadCompleteHandler);
   app.post("/api/analysis-upload", express.raw({ type: ["image/jpeg", "image/png", "image/webp"], limit: "5mb" }), analysisUploadHandler);
 }

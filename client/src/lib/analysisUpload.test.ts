@@ -9,7 +9,17 @@ const result = { id: 42, status: "completed", prediction: null, confidencePercen
 describe("uploadAndAnalyzeImage", () => {
   it("turns an unexpected HTML init response into a clear upload error instead of attempting JSON parsing", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("<html><h1>403 Forbidden</h1></html>", { status: 403, headers: { "content-type": "text/html" } })));
-    await expect(uploadAndAnalyzeImage({ file: image, filename: "sample.png", mimeType: "image/png" })).rejects.toThrow("structured response");
+    await expect(uploadAndAnalyzeImage({ file: image, filename: "sample.png", mimeType: "image/png" })).rejects.toThrow("upload preparation service returned a non-JSON response");
+  });
+
+  it("identifies a non-JSON chunk response instead of hiding the failing stage", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ key: "visionverify/1/sample.png_hash", uploadUrl: "https://storage.example/upload", imageUrl: "/manus-storage/visionverify/1/sample.png_hash", filename: "sample.png" }), { status: 200, headers: { "content-type": "application/json" } }))
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(new Response("<html><h1>403 Forbidden</h1></html>", { status: 403, headers: { "content-type": "text/html" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(uploadAndAnalyzeImage({ file: image, filename: "sample.png", mimeType: "image/png" })).rejects.toThrow("secure chunk upload service returned a non-JSON response");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it("surfaces a structured server error from the small init request", async () => {

@@ -4,7 +4,7 @@ import type { AcceptedImageMime } from "./imageValidation";
 export type UploadedAnalysis = { id: number; status: "completed" | "unavailable" | "failed"; prediction: string | null; confidencePercent: number | null; manipulationProbabilityPercent: number | null; modelMode: "live" | "demo" | "offline"; modelName: string; modelVersion: string | null; note: string | null };
 type UploadInit = { key: string; uploadUrl: string; imageUrl: string; filename: string };
 type ChunkUpload = { key: string; chunkIndex: number };
-const FALLBACK_CHUNK_BYTES = 192 * 1024;
+const FALLBACK_CHUNK_BYTES = 80 * 1024;
 
 function previewAuthorizationHeader() {
   try {
@@ -16,9 +16,9 @@ function previewAuthorizationHeader() {
   } catch { return {}; }
 }
 
-async function readJson<T extends object = { error?: { message?: string } }>(response: Response) {
+async function readJson<T extends object = { error?: { message?: string } }>(response: Response, stage: string) {
   const contentType = response.headers.get("content-type") ?? "";
-  if (!contentType.includes("application/json")) throw new Error("The upload service did not return a structured response. Please refresh this page and try again.");
+  if (!contentType.includes("application/json")) throw new Error(`The ${stage} returned a non-JSON response. Please refresh this page and try again.`);
   return response.json() as Promise<T & { error?: { message?: string } }>;
 }
 
@@ -32,8 +32,8 @@ async function uploadThroughSameOriginChunks(file: File, storageKey: string, onS
     for (let byteIndex = 0; byteIndex < bytes.length; byteIndex += 1) binary += String.fromCharCode(bytes[byteIndex] ?? 0);
     onStatus?.(`Transferring image securely (${index + 1}/${chunkCount})…`);
     const response = await fetch("/api/analysis-upload/chunk", { method: "POST", credentials: "include", cache: "no-store", headers: apiHeaders("application/json"), body: JSON.stringify({ storageKey, chunkIndex: index, chunkData: btoa(binary) }) });
-    if (!response.ok) { const body = await readJson(response); throw new Error(explainUploadError(body.error?.message, "The image could not be transferred to secure storage. Please try again shortly.")); }
-    const result = await readJson<ChunkUpload>(response);
+    if (!response.ok) { const body = await readJson(response, "secure chunk upload service"); throw new Error(explainUploadError(body.error?.message, "The image could not be transferred to secure storage. Please try again shortly.")); }
+    const result = await readJson<ChunkUpload>(response, "secure chunk upload service");
     if (!result.key) throw new Error("The upload service returned an incomplete chunk target. Please try again.");
     chunkKeys.push(result.key);
   }
@@ -54,8 +54,8 @@ function apiHeaders(contentType: string) {
 
 export async function uploadAndAnalyzeImage(input: { file: File; filename: string; mimeType: AcceptedImageMime; onStatus?: (message: string) => void }): Promise<UploadedAnalysis> {
   const initResponse = await fetch("/api/analysis-upload/init", { method: "POST", credentials: "include", cache: "no-store", headers: apiHeaders("application/json"), body: JSON.stringify({ filename: input.filename, mimeType: input.mimeType, byteSize: input.file.size }) });
-  if (!initResponse.ok) { const body = await readJson(initResponse); throw new Error(explainUploadError(body.error?.message, "VisionVerify could not prepare the image upload.")); }
-  const init = await readJson<UploadInit>(initResponse);
+  if (!initResponse.ok) { const body = await readJson(initResponse, "upload preparation service"); throw new Error(explainUploadError(body.error?.message, "VisionVerify could not prepare the image upload.")); }
+  const init = await readJson<UploadInit>(initResponse, "upload preparation service");
   if (!init.uploadUrl || !init.key || !init.imageUrl) throw new Error("The upload service returned an incomplete upload target. Please try again.");
 
   let chunkKeys: string[] | undefined;
@@ -68,7 +68,7 @@ export async function uploadAndAnalyzeImage(input: { file: File; filename: strin
 
   input.onStatus?.("Running live AI detection…");
   const completeResponse = await fetch("/api/analysis-upload/complete", { method: "POST", credentials: "include", cache: "no-store", headers: apiHeaders("application/json"), body: JSON.stringify({ filename: input.filename, mimeType: input.mimeType, storageKey: init.key, imageUrl: init.imageUrl, ...(chunkKeys ? { chunkKeys } : {}) }) });
-  if (!completeResponse.ok) { const body = await readJson(completeResponse); throw new Error(explainUploadError(body.error?.message, "VisionVerify could not complete the image analysis.")); }
-  const result = await readJson<UploadedAnalysis>(completeResponse);
+  if (!completeResponse.ok) { const body = await readJson(completeResponse, "analysis completion service"); throw new Error(explainUploadError(body.error?.message, "VisionVerify could not complete the image analysis.")); }
+  const result = await readJson<UploadedAnalysis>(completeResponse, "analysis completion service");
   return result;
 }

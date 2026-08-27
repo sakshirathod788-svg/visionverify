@@ -116,3 +116,15 @@
 - [x] Confirmed from the latest mobile network trace: `/api/analysis-upload/init` returns 200, then the cross-origin presigned S3 PUT fails with `TypeError: Failed to fetch`; completion is never reached.
 - [x] Add a same-origin chunked storage fallback for browsers that cannot use the presigned PUT because of storage CORS, with bounded JSON chunks and server-side revalidation.
 - [x] Add client and server regression coverage for the chunked fallback and preserve the existing direct presigned path when it succeeds.
+
+## Non-JSON gateway response during mobile fallback
+- [x] Reproduce the new "upload service did not return a structured response" error and identify whether init, chunk, or completion returns non-JSON: the 192 KiB fallback chunk was blocked with an HTML 403 from Microsoft Azure Application Gateway.
+- [x] Add stage-specific client diagnostics and a compatible gateway response handling path without accepting fabricated or unvalidated analysis results: fallback chunks are now 80 KiB and preparation, chunk, and completion errors are labeled.
+- [x] Re-run forced-fallback and normal live flows, full tests, and responsive verification before checkpointing: three repeated 2.04 MB fallback uploads, normal direct flow, mobile screenshot, and final 23-test suite passed.
+
+## Repeated 2.04 MB PNG failure shown on mobile
+- [x] Reproduce the valid 2.04 MB PNG case and capture the exact init, presigned PUT, fallback chunk, and completion response stages: shell 200, init 200, 25 chunk responses 200, and complete 200.
+- [x] Make non-JSON gateway responses identify their failing stage and remain recoverable for repeated image analyses; the client now names preparation, secure chunk, and completion stages.
+- [x] Add exact-size repeated-upload regression coverage, then rerun live provider, full tests, and mobile verification before checkpointing; three consecutive 2.04 MB fallback uploads completed.
+- [x] Run the full regression suite (`pnpm test && pnpm check`) after the 80 KiB chunk-size change and repeated-upload harness update, then record the passing result before the next checkpoint: 23 tests passed, 3 gated tests skipped, and TypeScript check passed.
+- [x] Re-run the normal direct live upload regression after the 80 KiB fallback and repeated-upload harness changes, then record shell/init/storage/complete statuses: shell 200, init 200, storage 200, complete 200.
